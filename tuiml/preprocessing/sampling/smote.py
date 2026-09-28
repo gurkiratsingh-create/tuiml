@@ -197,6 +197,271 @@ class SMOTESampler(Transformer):
     def __repr__(self) -> str:
         return f"SMOTE(k_neighbors={self.k_neighbors})"
 
+class SMOTENCSampler(SMOTESampler):
+    """SMOTE for datasets containing numerical and categorical features.
+
+    Overview
+    --------
+    SMOTENC (Synthetic Minority Over-sampling Technique for Nominal and
+    Continuous features) extends SMOTE to datasets containing both numerical
+    and categorical features.
+
+    Numerical features are interpolated between a minority sample and one of
+    its nearest minority neighbors. Categorical features are handled without
+    numerical interpolation so that generated samples retain valid category
+    values.
+
+    Neighbor selection combines the numerical distance between samples with
+    a categorical distance based on mismatched categorical features. The
+    categorical contribution is scaled using the median standard deviation
+    of the numerical features in the target class.
+
+    Parameters
+    ----------
+    categorical_features : Sequence[int]
+        Column indices of the categorical features in ``X``.
+
+    sampling_strategy : float, str or dict, default="auto"
+        Determines which classes to resample and by how much:
+        - ``"auto"`` / ``"not majority"``: Resample all classes except the
+          majority class.
+        - ``"minority"``: Resample only the minority class.
+        - ``"all"``: Resample all classes to match the majority class.
+        - ``float``: Desired sampling ratio.
+        - ``dict``: ``{class_label: n_samples}`` specifying the number of
+          samples to generate for each class.
+
+    k_neighbors : int, default=5
+        Number of nearest minority neighbors used for synthetic sample
+        generation.
+
+    random_state : int, optional
+        Seed for the random number generator to ensure reproducibility.
+
+    Attributes
+    ----------
+    categorical_features_ : ndarray
+        Validated categorical feature indices.
+
+    sampling_strategy_ : dict
+        Resolved mapping of class labels to the number of synthetic samples
+        to generate.
+
+    _numeric_features_ : ndarray
+        Column indices corresponding to the numerical features.
+
+    See Also
+    --------
+    :class:`~tuiml.preprocessing.sampling.SMOTESampler`
+        Standard SMOTE for numerical features.
+    :class:`~tuiml.preprocessing.sampling.BorderlineSMOTESampler`
+        SMOTE variant that focuses on borderline minority samples.
+
+    Examples
+    --------
+    Oversample a dataset containing numerical and categorical features:
+
+    >>> from tuiml.preprocessing.sampling import SMOTENCSampler
+    >>> import numpy as np
+    >>> X = np.array([
+    ...     [20.0, 30.0, 0],
+    ...     [22.0, 34.0, 0],
+    ...     [21.0, 32.0, 1],
+    ...     [24.0, 40.0, 1],
+    ...     [23.0, 38.0, 0],
+    ...     [25.0, 42.0, 1],
+    ...     [28.0, 45.0, 0],
+    ... ])
+    >>> y = np.array([0, 0, 0, 1, 1, 1, 0])
+    >>> sampler = SMOTENCSampler(
+    ...     categorical_features=[2],
+    ...     k_neighbors=2,
+    ...     random_state=42,
+    ... )
+    >>> X_res, y_res = sampler.fit_resample(X, y)
+    """
+
+    def __init__(
+        self,
+        categorical_features,
+        sampling_strategy="auto",
+        k_neighbors=5,
+        random_state=None,
+        ):
+        super().__init__(
+            sampling_strategy=sampling_strategy,
+            k_neighbors=k_neighbors,
+            random_state=random_state,
+        )
+        self.categorical_features = categorical_features
+
+    def fit(self, X, y):
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        self._validate_input(X, y)
+
+        n_features = X.shape[1]
+
+        self.categorical_features_ = np.asarray(
+            self.categorical_features,
+            dtype=int,
+        )
+
+        if np.any(self.categorical_features_ < 0) or np.any(
+            self.categorical_features_ >= n_features
+            ):
+            raise ValueError(
+                "categorical_features contains an invalid column index"
+            )
+
+        if len(self.categorical_features_) == 0:
+            raise ValueError(
+                "SMOTENC requires at least one categorical feature"
+            )
+
+        if len(self.categorical_features_) == n_features:
+            raise ValueError(
+                "SMOTENC requires at least one numerical feature"
+            )
+
+        self._numeric_features_ = np.array(
+            [
+                i
+                for i in range(n_features)
+                if i not in self.categorical_features_
+            ]
+        )
+
+        self.sampling_strategy_ = self._compute_sampling_strategy(y)
+
+        self._is_fitted = True
+
+        return self
+
+    def _find_neighbors(self, X, index):
+        distances = np.zeros(X.shape[0], dtype=float)
+
+        numeric_data = X[:, self._numeric_features_]
+
+        if len(self._numeric_features_) > 0:
+            std = np.std(numeric_data, axis=0)
+            median_std = np.median(std)
+        else:
+            median_std = 0.0
+
+        for i in range(X.shape[0]):
+            if i == index:
+                distances[i] = np.inf
+                continue
+
+            numeric_distance = 0.0
+
+            if len(self._numeric_features_) > 0:
+                diff = (
+                    X[i, self._numeric_features_]
+                    - X[index, self._numeric_features_]
+                )
+
+                numeric_distance = np.sum(diff**2)
+
+            categorical_distance = 0.0
+
+            for feature in self.categorical_features_:
+                if X[i, feature] != X[index, feature]:
+                    categorical_distance += median_std**2
+
+            distances[i] = numeric_distance + categorical_distance
+
+        return np.argsort(distances)[: self.k_neighbors]
+
+    def _generate_samples(self, X, n_samples, rng):
+        samples = np.empty(
+            (n_samples, X.shape[1]),
+            dtype=X.dtype,
+        )
+
+        for i in range(n_samples):
+            source_idx = rng.randint(0, len(X))
+
+            neighbors = self._find_neighbors(X, source_idx)
+            neighbor_idx = rng.choice(neighbors)
+
+            source = X[source_idx]
+            neighbor = X[neighbor_idx]
+
+            alpha = rng.random_sample()
+
+            # Numerical features: interpolate.
+            for feature in self._numeric_features_:
+                samples[i, feature] = (
+                    source[feature]
+                    + alpha * (neighbor[feature] - source[feature])
+                )
+
+            # Categorical features: choose the most frequent
+            # category among the source and its neighbors.
+            for feature in self.categorical_features_:
+                categories = np.concatenate(
+                    (
+                        X[neighbors, feature],
+                        np.array([source[feature]]),
+                    )
+                )
+
+                values, counts = np.unique(
+                    categories,
+                    return_counts=True,
+                )
+
+                max_count = np.max(counts)
+                candidates = values[counts == max_count]
+
+                samples[i, feature] = rng.choice(candidates)
+
+        return samples
+    def __repr__(self) -> str:
+        return (
+            f"SMOTENC("
+            f"categorical_features={self.categorical_features}, "
+            f"k_neighbors={self.k_neighbors}"
+            f")"
+        )
+
+    @classmethod
+    def get_parameter_schema(cls) -> Dict[str, Dict]:
+        """Return JSON Schema for parameters."""
+        return {
+            "categorical_features": {
+                "type": "array",
+                "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                },
+                "description": "Column indices of categorical features",
+            },
+            "sampling_strategy": {
+                "type": ["string", "number", "object"],
+                "default": "auto",
+                "description": (
+                    "Sampling strategy: 'auto', 'minority', "
+                    "'not majority', float ratio, or dict {class: count}"
+                ),
+            },
+            "k_neighbors": {
+                "type": "integer",
+                "default": 5,
+                "minimum": 1,
+                "description": (
+                    "Number of nearest neighbors for synthetic sample generation"
+                ),
+            },
+            "random_state": {
+                "type": ["integer", "null"],
+                "default": None,
+                "description": "Random seed for reproducibility",
+            },
+        }
 class BorderlineSMOTESampler(SMOTESampler):
     """Borderline-SMOTE for oversampling near decision boundaries.
 

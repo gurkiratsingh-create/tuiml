@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Added `SMOTENCSampler` for mixed numerical and categorical feature oversampling.
+
 ## [0.2.0] - 2026-09-03
 
 The first minor release. Six new packages (`automl`, `uncertainty`, `explain`,
