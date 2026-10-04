@@ -760,17 +760,44 @@ class RandomForestClassifier(Classifier):
         """String representation."""
         if self._is_fitted:
             oob_str = f", oob_score={self.oob_score_:.4f}" if self.oob_score_ is not None else ""
-            return (f"RandomForestClassifier(n_estimators={self.n_estimators}, "
-                   f"n_features={self.n_features_}{oob_str})")
+            return (
+                f"RandomForestClassifier(n_estimators={self.n_estimators}, "
+                f"n_features={self.n_features_}{oob_str})"
+            )
         return f"RandomForestClassifier(n_estimators={self.n_estimators})"
+
+
 @classifier(
     tags=["trees", "ensemble", "random", "bagging"],
     version="1.0.0",
 )
-
 class BalancedRandomForestClassifier(RandomForestClassifier):
     """Balanced Random Forest classifier.
+    Overview
+    --------
+    Balanced Random Forest handles class imbalance by creating a balanced
+    training subset for each decision tree.
 
+    Theory
+    ------
+    For every tree, samples are drawn from each class so that the tree is
+    trained on a balanced class distribution. The predictions of all trees
+    are aggregated to produce the final prediction.
+
+    Notes
+    -----
+    Each tree uses TuiML's native decision-tree implementation.
+
+    References
+    ----------
+    Chen, C., Liaw, A., & Breiman, L. (2004). Using Random Forest to Learn
+    Imbalanced Data. University of California, Berkeley.
+    DOI: 10.1109/ICDM.2004.10095
+
+    See Also
+    --------
+    RandomForestClassifier
+    EasyEnsembleClassifier
     Builds an ensemble of native TuiML decision trees using a balanced
     bootstrap sample for every tree.
 
@@ -816,15 +843,17 @@ class BalancedRandomForestClassifier(RandomForestClassifier):
     """
 
     def __init__(
-        self,
-        n_estimators: int = 100,
-        max_features: Any = "sqrt",
-        max_depth: Optional[int] = None,
-        min_samples_split: int = 2,
-        min_samples_leaf: int = 1,
-        random_state: Optional[int] = None,
-        n_jobs: int = -1,
-        criterion: str = "gini",
+    self,
+    n_estimators: int = 100,
+    max_features: Any = "sqrt",
+    max_depth: Optional[int] = None,
+    min_samples_split: int = 2,
+    min_samples_leaf: int = 1,
+    bootstrap: bool = True,
+    oob_score: bool = False,
+    random_state: Optional[int] = None,
+    n_jobs: int = -1,
+    criterion: str = "gini",
     ):
         super().__init__(
             n_estimators=n_estimators,
@@ -832,8 +861,8 @@ class BalancedRandomForestClassifier(RandomForestClassifier):
             max_depth=max_depth,
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
-            bootstrap=True,
-            oob_score=False,
+            bootstrap=bootstrap,
+            oob_score=oob_score,
             random_state=random_state,
             n_jobs=n_jobs,
             criterion=criterion,
@@ -874,6 +903,16 @@ class BalancedRandomForestClassifier(RandomForestClassifier):
                 "default": 1,
                 "minimum": 1,
                 "description": "Minimum samples required at a leaf node",
+            },
+            "bootstrap": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether bootstrap samples are used when building trees",
+            },
+            "oob_score": {
+                "type": "boolean",
+                "default": False,
+                "description": "Whether to compute the out-of-bag score",
             },
             "random_state": {
                 "type": ["integer", "null"],
@@ -1026,6 +1065,10 @@ class BalancedRandomForestClassifier(RandomForestClassifier):
             "BalancedRandomForestClassifier("
             f"n_estimators={self.n_estimators})"
         )
+@regressor(
+    tags=["trees", "ensemble", "random", "bagging"],
+    version="1.0.0",
+)
 class RandomForestRegressor(Regressor):
     """Random Forest regressor - ensemble of random regression trees.
 

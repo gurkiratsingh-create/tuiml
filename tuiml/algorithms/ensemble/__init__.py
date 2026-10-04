@@ -42,6 +42,7 @@ from tuiml.algorithms.ensemble.one_vs_rest import (
     OneVsRestClassifier,
 )
 
+
 __all__ = [
     "BaggingClassifier",
     "BaggingRegressor",

@@ -68,7 +68,33 @@ class EasyEnsembleClassifier(Classifier):
     undersampling the majority class. A native TuiML AdaBoost classifier is
     trained on each subset and the resulting ensembles are combined through
     weighted voting.
+    Overview
+    --------
+    Easy Ensemble handles class imbalance by training multiple AdaBoost
+    classifiers on different balanced subsets of the training data.
 
+    Theory
+    ------
+    Each ensemble member is trained on a different balanced subset created
+    through random undersampling of the majority classes. The probability
+    estimates from the individual AdaBoost models are averaged to produce
+    the final prediction.
+
+    Notes
+    -----
+    The implementation uses TuiML's native AdaBoostClassifier.
+
+    References
+    ----------
+    Liu, X.-Y., Wu, J., & Zhou, Z.-H. (2009). Exploratory Undersampling for
+    Class-Imbalance Learning. IEEE Transactions on Systems, Man, and Cybernetics,
+    Part B, 39(2), 539-550.
+    DOI: 10.1109/TSMCB.2008.2007853
+
+    See Also
+    --------
+    BalancedRandomForestClassifier
+    AdaBoostClassifier
     Parameters
     ----------
     n_estimators : int, default=10
@@ -102,13 +128,21 @@ class EasyEnsembleClassifier(Classifier):
 
     Examples
     --------
-    >>> from tuiml.algorithms.ensemble import EasyEnsembleClassifier
+    >>> from sklearn.datasets import make_classification
+    >>> X, y = make_classification(
+    ...     n_samples=200,
+    ...     n_features=6,
+    ...     weights=[0.1, 0.9],
+    ...     random_state=42,
+    ... )
     >>> clf = EasyEnsembleClassifier(
-    ...     n_estimators=10,
+    ...     n_estimators=3,
     ...     random_state=42,
     ... )
     >>> clf.fit(X, y)
     EasyEnsembleClassifier(...)
+    >>> clf.predict(X[:3])
+    array([...])
     """
 
     def __init__(
@@ -213,8 +247,21 @@ class EasyEnsembleClassifier(Classifier):
         X: np.ndarray,
         y: np.ndarray,
     ) -> "EasyEnsembleClassifier":
-        """Fit the EasyEnsemble classifier."""
+        """Fit the ensemble.
 
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Training samples.
+
+        y : ndarray of shape (n_samples,)
+            Target values.
+
+        Returns
+        -------
+        self
+            Fitted classifier.
+        """
         X = np.asarray(X, dtype=float)
         y = np.asarray(y)
 
@@ -285,42 +332,37 @@ class EasyEnsembleClassifier(Classifier):
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """Predict class labels."""
+        """Predict class labels for samples.
 
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Input samples.
+
+        Returns
+        -------
+        ndarray of shape (n_samples,)
+            Predicted class labels.
+        """
         self._check_is_fitted()
 
-        X = np.asarray(X, dtype=float)
+        probabilities = self.predict_proba(X)
 
-        if X.ndim == 1:
-            X = X.reshape(-1, 1)
-
-        all_predictions = np.array(
-            [
-                estimator.predict(X)
-                for estimator in self.estimators_
-            ]
-        )
-
-        predictions = []
-
-        for i in range(X.shape[0]):
-            values, counts = np.unique(
-                all_predictions[:, i],
-                return_counts=True,
-            )
-
-            predictions.append(
-                values[np.argmax(counts)]
-            )
-
-        return np.asarray(
-            predictions,
-            dtype=self.classes_.dtype,
-        )
+        return self.classes_[np.argmax(probabilities, axis=1)]
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Predict class probabilities."""
+        """Predict class probabilities.
 
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Input samples.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_classes)
+            Predicted class probabilities.
+        """
         self._check_is_fitted()
 
         X = np.asarray(X, dtype=float)
@@ -331,19 +373,14 @@ class EasyEnsembleClassifier(Classifier):
         probabilities = []
 
         for estimator in self.estimators_:
-            probabilities.append(
-                estimator.predict_proba(X)
-            )
+            probabilities.append(estimator.predict_proba(X))
 
-        return np.mean(
-            probabilities,
-            axis=0,
-        )
+        return np.mean(probabilities, axis=0)
 
     def __repr__(self) -> str:
         return (
-        f"EasyEnsembleClassifier("
-        f"n_estimators={self.n_estimators}, "
-        f"adaboost_estimators={self.adaboost_estimators}"
-        f")"
+            f"EasyEnsembleClassifier("
+            f"n_estimators={self.n_estimators}, "
+            f"adaboost_estimators={self.adaboost_estimators}"
+            f")"
         )

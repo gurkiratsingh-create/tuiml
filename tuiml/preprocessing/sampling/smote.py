@@ -296,7 +296,22 @@ class SMOTENCSampler(SMOTESampler):
         self.categorical_features = categorical_features
 
     def fit(self, X, y):
-        X = np.asarray(X)
+        """Fit the sampler to the training data.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Training input samples.
+
+        y : ndarray of shape (n_samples,)
+            Target class labels.
+
+        Returns
+        -------
+        self
+            Fitted sampler.
+        """
+        X = np.asarray(X,dtype=object)
         y = np.asarray(y)
 
         self._validate_input(X, y)
@@ -339,73 +354,112 @@ class SMOTENCSampler(SMOTESampler):
 
         return self
 
-    def _find_neighbors(self, X, index):
-        distances = np.zeros(X.shape[0], dtype=float)
+    def _find_neighbors(self, X, source_idx=None):
+        """Find nearest neighbors using mixed numerical/categorical distance.
 
-        numeric_data = X[:, self._numeric_features_]
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Minority-class samples.
+            source_idx : int or None, default=None
+            Sample index for which neighbors should be returned. If None, return
+            all nearest-neighbor indices for every sample.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, k_neighbors) or (k_neighbors,)
+            Indices of the nearest neighbors for every sample, or for a single
+            sample when ``source_idx`` is provided.
+        """
+        n_samples = X.shape[0]
 
         if len(self._numeric_features_) > 0:
+            numeric_data = np.asarray(
+                X[:, self._numeric_features_],
+                dtype=float,
+            )
             std = np.std(numeric_data, axis=0)
             median_std = np.median(std)
+
+            diff = (
+                numeric_data[:, None, :]
+                - numeric_data[None, :, :]
+            )
+            distances = np.sum(diff**2, axis=2)
         else:
             median_std = 0.0
+            distances = np.zeros(
+                (n_samples, n_samples),
+                dtype=float,
+            )
 
-        for i in range(X.shape[0]):
-            if i == index:
-                distances[i] = np.inf
-                continue
+        if len(self.categorical_features_) > 0:
+            categorical_data = X[:, self.categorical_features_]
+            mismatches = (
+                categorical_data[:, None, :]
+                != categorical_data[None, :, :]
+            )
+            distances += (
+                np.sum(mismatches, axis=2) * median_std**2
+            )
 
-            numeric_distance = 0.0
+        np.fill_diagonal(distances, np.inf)
 
-            if len(self._numeric_features_) > 0:
-                diff = (
-                    X[i, self._numeric_features_]
-                    - X[index, self._numeric_features_]
-                )
-
-                numeric_distance = np.sum(diff**2)
-
-            categorical_distance = 0.0
-
-            for feature in self.categorical_features_:
-                if X[i, feature] != X[index, feature]:
-                    categorical_distance += median_std**2
-
-            distances[i] = numeric_distance + categorical_distance
-
-        return np.argsort(distances)[: self.k_neighbors]
+        neighbors = np.argsort(distances, axis=1)[:, :self.k_neighbors]
+        if source_idx is not None:
+            return neighbors[source_idx]
+        return neighbors
 
     def _generate_samples(self, X, n_samples, rng):
+        """Generate synthetic mixed numerical/categorical samples.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_features)
+            Minority-class samples.
+
+        n_samples : int
+            Number of synthetic samples to generate.
+
+        rng : numpy.random.RandomState
+            Random number generator.
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features)
+            Generated synthetic samples.
+        """
+        neighbors = self._find_neighbors(X)
+
+        dtype = object if X.dtype.kind in "OUS" else float
+
         samples = np.empty(
             (n_samples, X.shape[1]),
-            dtype=X.dtype,
+            dtype=dtype,
         )
 
         for i in range(n_samples):
             source_idx = rng.randint(0, len(X))
-
-            neighbors = self._find_neighbors(X, source_idx)
-            neighbor_idx = rng.choice(neighbors)
+            neighbor_idx = rng.choice(neighbors[source_idx])
 
             source = X[source_idx]
             neighbor = X[neighbor_idx]
-
             alpha = rng.random_sample()
 
-            # Numerical features: interpolate.
             for feature in self._numeric_features_:
+                source_value = float(source[feature])
+                neighbor_value = float(neighbor[feature])
+
                 samples[i, feature] = (
-                    source[feature]
-                    + alpha * (neighbor[feature] - source[feature])
+                    source_value
+                    + alpha * (neighbor_value - source_value)
                 )
 
-            # Categorical features: choose the most frequent
-            # category among the source and its neighbors.
             for feature in self.categorical_features_:
                 categories = np.concatenate(
                     (
-                        X[neighbors, feature],
-                        np.array([source[feature]]),
+                        X[neighbors[source_idx], feature],
+                        np.array([source[feature]], dtype=object),
                     )
                 )
 
@@ -420,6 +474,7 @@ class SMOTENCSampler(SMOTESampler):
                 samples[i, feature] = rng.choice(candidates)
 
         return samples
+
     def __repr__(self) -> str:
         return (
             f"SMOTENC("
