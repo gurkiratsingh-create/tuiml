@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and crashed.
 
 ### Changed
+- MCP tool schemas trimmed: shorter descriptions, permissive shapes in
+  place of verbose `oneOf` blocks, and the wrong examples (`SVM`, `wine`,
+  `breast_cancer`) corrected. `tools/list` now costs roughly half the
+  tokens it did, with no change in accepted arguments.
 - **`SKILL.md` is now a 1,200-token router instead of a 13,000-token
   manual.** It keeps the two-dialect rule, the exact-name table, the
   built-in dataset list and the core tool loop, and links to
@@ -55,8 +59,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `load_skill()`.
 
 ### Fixed
+- `tuiml_read_algorithm`, `tuiml_list_files` and `tuiml_search_source` now
+  cover the wrapper packages (`foundation`, `sklearn`, `capymoa`, `weka`)
+  as well as `algorithms/`, and accept namespaced keys such as
+  `foundation.ChronosForecaster` or `sklearn.SVC`. A bare name still
+  resolves to the native implementation first. The packages are located
+  on disk without being imported, so listing never starts a JVM.
+- Unknown component names now come back with close matches ("Unknown
+  component 'SVM'. Did you mean: SVC, SVR?").
+- Built-in dataset names accept underscore, hyphen and case variants
+  (`breast_cancer` → `breast-cancer`) and the alias `credit` → `credit-g`;
+  the not-found error lists close matches.
+- `tuiml_test_statistics` and the comparison plots (`cd_diagram`,
+  `boxplot_comparison`, `heatmap`, `ranking_table`) accept a
+  `tuiml_benchmark` result as returned, with an optional `metric`; the
+  flat `{algorithm: [scores]}` form still works.
 - Notebook export no longer emits a `print` with a raw Windows path, which
   Python read as a broken `\U` escape and refused to run.
+
 - Two-value lists such as `[2, 8]` or `[0.01, 0.3]` in `ParameterDistribution`
   (random search) and `BayesianSearchCV` param spaces are discrete choices
   again, not continuous ranges, and sampled values keep their Python type.
