@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pretrained time series foundation models.** `foundation.ChronosForecaster`
+  (Amazon Chronos-Bolt tiny/mini/small/base and Chronos-2, selected by
+  `checkpoint`) and `foundation.TimesFMForecaster` (Google TimesFM 2.5
+  200M) join TabICL in `tuiml.foundation`. They follow the native
+  forecaster API, `fit(y)` then `predict(steps)`, and add
+  `predict_quantiles(steps)`. Both are Apache-2.0 for code and weights;
+  Moirai (non-commercial weights) is deliberately excluded. The
+  `foundation` extra now pulls `chronos-forecasting` and `timesfm`. Pickled
+  forecasters store the context only, never the checkpoint.
 - `Benchmark` (and `tuiml_benchmark`) support a `forecasting` task:
   forecasters are detected by their `timeseries` tag and scored on
   time-ordered expanding-window folds (`cv`) or a tail holdout
