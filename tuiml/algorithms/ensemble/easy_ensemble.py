@@ -128,21 +128,16 @@ class EasyEnsembleClassifier(Classifier):
 
     Examples
     --------
-    >>> from sklearn.datasets import make_classification
-    >>> X, y = make_classification(
-    ...     n_samples=200,
-    ...     n_features=6,
-    ...     weights=[0.1, 0.9],
-    ...     random_state=42,
-    ... )
-    >>> clf = EasyEnsembleClassifier(
-    ...     n_estimators=3,
-    ...     random_state=42,
-    ... )
+    >>> from tuiml.datasets import load_iris
+    >>> from tuiml.algorithms.ensemble import EasyEnsembleClassifier
+    >>> data = load_iris()
+    >>> X = data.data
+    >>> y = data.target
+    >>> clf = EasyEnsembleClassifier(n_estimators=3, random_state=42)
     >>> clf.fit(X, y)
     EasyEnsembleClassifier(...)
     >>> clf.predict(X[:3])
-    array([...])
+    array([0, 0, 0])
     """
 
     def __init__(
@@ -384,3 +379,4 @@ class EasyEnsembleClassifier(Classifier):
             f"adaboost_estimators={self.adaboost_estimators}"
             f")"
         )
+    

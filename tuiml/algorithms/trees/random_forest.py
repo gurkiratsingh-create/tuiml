@@ -833,27 +833,29 @@ class BalancedRandomForestClassifier(RandomForestClassifier):
 
     Examples
     --------
-    >>> from tuiml.algorithms.trees import BalancedRandomForestClassifier
-    >>> clf = BalancedRandomForestClassifier(
-    ...     n_estimators=10,
-    ...     random_state=42,
-    ... )
+    >>> from tuiml.datasets import load_iris
+    >>> data = load_iris()
+    >>> X = data.data
+    >>> y = data.target
+    >>> clf = BalancedRandomForestClassifier(n_estimators=3, random_state=42)
     >>> clf.fit(X, y)
     BalancedRandomForestClassifier(...)
+    >>> clf.predict(X[:3])
+    array([0, 0, 0])
     """
 
     def __init__(
-    self,
-    n_estimators: int = 100,
-    max_features: Any = "sqrt",
-    max_depth: Optional[int] = None,
-    min_samples_split: int = 2,
-    min_samples_leaf: int = 1,
-    bootstrap: bool = True,
-    oob_score: bool = False,
-    random_state: Optional[int] = None,
-    n_jobs: int = -1,
-    criterion: str = "gini",
+        self,
+        n_estimators: int = 100,
+        max_features: Any = "sqrt",
+        max_depth: Optional[int] = None,
+        min_samples_split: int = 2,
+        min_samples_leaf: int = 1,
+        bootstrap: bool = True,
+        oob_score: bool = False,
+        random_state: Optional[int] = None,
+        n_jobs: int = -1,
+        criterion: str = "gini",
     ):
         super().__init__(
             n_estimators=n_estimators,
